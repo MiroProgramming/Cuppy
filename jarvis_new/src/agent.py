@@ -16,6 +16,7 @@ from livekit.agents.beta.tools import EndCallTool
 from livekit.plugins import ai_coustics, google
 
 from browser import BrowserManager
+from discord_tools import DiscordClient, DiscordTools
 from prompts import AGENT_INSTRUCTIONS
 from tools import BrowserTools
 
@@ -23,9 +24,14 @@ load_dotenv(".env.local")
 
 
 class Assistant(Agent):
-    def __init__(self, browser: BrowserManager | None = None) -> None:
+    def __init__(
+        self,
+        browser: BrowserManager | None = None,
+        discord: DiscordClient | None = None,
+    ) -> None:
         self.browser = browser or BrowserManager(headless=True)
         self.browser_tools = BrowserTools(self.browser)
+        self.discord_tools = DiscordTools(discord, self.browser) if discord else None
         self._end_call_tool = EndCallTool(
             extra_description=(
                 "Only end the call after the user clearly says they are finished, "
@@ -104,6 +110,15 @@ class Assistant(Agent):
                         - Only call confirm_browser_action after the user has clearly confirmed the exact action.
                         - Collect required inputs first. Perform actions silently if the runtime expects it.
 
+                        # Discord
+
+                        - You can message the user on Discord. Use send_discord_message when they ask you to message, text, ping, or send them something, or when a result is better read than heard, such as links, lists, addresses, or long summaries.
+                        - Use send_discord_screenshot when they ask you to send them the page or a screenshot.
+                        - Use read_discord_messages when they ask you to check or act on what they sent you on Discord.
+                        - Discord messages may use full links and simple markdown. Keep spoken replies short, for example "Sent to your Discord, Sir."
+                        - Sending a Discord message to the user does not need extra confirmation.
+                        - If Discord tools are unavailable, tell the user Discord is not configured.
+
                         # Special Requests
                         - If the user asks to play his theme song or to play his favorite song, open this url: https://music.youtube.com/watch?v=dWuwreQg1IA
 
@@ -116,6 +131,7 @@ class Assistant(Agent):
                     ),
             tools=[
                 *self.browser_tools.tools,
+                *(self.discord_tools.tools if self.discord_tools else []),
                 *self._end_call_tool.tools,
             ],
         )
@@ -134,6 +150,10 @@ async def my_agent(ctx: JobContext):
 
     browser = BrowserManager(headless=False)
     ctx.add_shutdown_callback(browser.close)
+
+    discord = DiscordClient.from_env()
+    if discord is not None:
+        ctx.add_shutdown_callback(discord.close)
 
     # Gemini realtime handles the voice input and output for this session.
     session = AgentSession(
@@ -168,7 +188,7 @@ async def my_agent(ctx: JobContext):
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(browser),
+        agent=Assistant(browser, discord),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             video_input=True,

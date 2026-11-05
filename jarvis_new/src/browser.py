@@ -264,6 +264,16 @@ class BrowserManager:
             except Exception as exc:
                 raise BrowserError(f"I could not go back: {exc}") from exc
 
+    async def screenshot_png(self) -> tuple[bytes, str]:
+        """Return the current page as PNG bytes along with its URL."""
+        page = await self._get_page()
+
+        async with self._lock:
+            try:
+                return await page.screenshot(type="png"), page.url
+            except Exception as exc:
+                raise BrowserError(f"I could not capture the page: {exc}") from exc
+
     async def take_screenshot(self) -> dict[str, str | int | bool]:
         page = await self._get_page()
 
