@@ -130,6 +130,26 @@ cd agent-starter-flutter
 flutter run
 ```
 
+
+## Background Watches (Cuppy keeps checking for you)
+
+Ask Cuppy something like *"Keep an eye out for Australian Shepherd puppies for sale in Egypt"* and it saves a **watch**. A separate watcher program re-checks every couple of hours (at slightly varied times) and DMs you on Discord when a new matching listing appears. It remembers what it already sent, so you only hear about new ones.
+
+Requires `GOOGLE_API_KEY`, `DISCORD_BOT_TOKEN` and `DISCORD_USER_ID` in `jarvis_new/.env.local`.
+
+Start it in a second terminal and leave it running (your PC must stay on and not sleep):
+
+```
+cd jarvis_new
+uv run src/watcher.py
+```
+
+Tips:
+- To watch a specific site, open its search results while talking to Cuppy and say "watch this page".
+- Ask "What are you watching?" or "Stop watching for puppies" to manage watches.
+- The first check sends whatever matches right now; after that, only new listings.
+- Sites that require a login (e.g. Facebook Marketplace) usually can't be checked.
+
 ## Architecture
 
 Cuppy uses **LiveKit's realtime agent framework** with function tools:

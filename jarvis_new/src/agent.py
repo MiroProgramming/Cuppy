@@ -19,6 +19,7 @@ from browser import BrowserManager
 from discord_tools import DiscordClient, DiscordTools
 from prompts import AGENT_INSTRUCTIONS
 from tools import BrowserTools
+from watches import WatchStore, WatchTools
 
 load_dotenv(".env.local")
 
@@ -32,6 +33,7 @@ class Assistant(Agent):
         self.browser = browser or BrowserManager(headless=True)
         self.browser_tools = BrowserTools(self.browser)
         self.discord_tools = DiscordTools(discord, self.browser) if discord else None
+        self.watch_tools = WatchTools(WatchStore(), self.browser) if discord else None
         self._end_call_tool = EndCallTool(
             extra_description=(
                 "Only end the call after the user clearly says they are finished, "
@@ -119,6 +121,14 @@ class Assistant(Agent):
                         - Sending a Discord message to the user does not need extra confirmation.
                         - If Discord tools are unavailable, tell the user Discord is not configured.
 
+                        # Watching for things in the background
+
+                        - When the user asks you to keep checking, keep an eye out, or let them know when something new appears, use create_watch. It keeps running after the call ends and messages the user on Discord when something new matches.
+                        - Before creating a watch, make sure you know what to look for and the location if it matters. If they did not say how often, check every two hours.
+                        - If the browser is showing a listings or search page they want watched, set watch_current_page to true.
+                        - Use list_watches and cancel_watch when they ask what you are watching or want one stopped.
+                        - After creating a watch, confirm briefly, for example "I shall keep an eye out and message you on Discord, Sir."
+
                         # Special Requests
                         - If the user asks to play his theme song or to play his favorite song, open this url: https://music.youtube.com/watch?v=dWuwreQg1IA
 
@@ -132,6 +142,7 @@ class Assistant(Agent):
             tools=[
                 *self.browser_tools.tools,
                 *(self.discord_tools.tools if self.discord_tools else []),
+                *(self.watch_tools.tools if self.watch_tools else []),
                 *self._end_call_tool.tools,
             ],
         )
