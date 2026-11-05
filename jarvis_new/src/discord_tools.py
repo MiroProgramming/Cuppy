@@ -1,4 +1,4 @@
-"""Discord messaging tools so Jarvis can DM its owner.
+"""Discord messaging tools so Cuppy can DM its owner.
 
 Uses the Discord REST API directly through aiohttp (already installed with
 livekit-agents), so no extra dependency or gateway connection is needed.
@@ -157,7 +157,7 @@ class DiscordClient:
 
         headers = {
             "Authorization": f"Bot {self._token}",
-            "User-Agent": "DiscordBot (jarvis-voice-butler, 1.0)",
+            "User-Agent": "DiscordBot (cuppy, 1.0)",
         }
         try:
             async with self._session.request(
@@ -196,7 +196,7 @@ def _friendly_error(status: int) -> str:
 
 
 class DiscordTools:
-    """LiveKit function tools that let Jarvis message the user on Discord."""
+    """LiveKit function tools that let Cuppy message the user on Discord."""
 
     def __init__(
         self, client: DiscordClient, browser: BrowserManager | None = None

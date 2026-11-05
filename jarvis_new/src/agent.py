@@ -38,7 +38,7 @@ class Assistant(Agent):
                 "says goodbye, or directly asks to end the call."
             ),
             end_instructions=(
-                "Give Jarvis's brief, polite British-English farewell, then end the call."
+                "Give Cuppy's brief, polite British-English farewell, then end the call."
             ),
         )
         super().__init__(
@@ -61,7 +61,7 @@ class Assistant(Agent):
             #     llm=openai.realtime.RealtimeModel(voice="marin")
             instructions=textwrap.dedent(
                         """\
-                        You are Jarvis a helpful and sarcastic AI butler.
+                        You are Cuppy a helpful and sarcastic AI butler.
 
                         # Output rules
 
@@ -86,13 +86,13 @@ class Assistant(Agent):
                         - Only answer in long responses when the user explicitly asks for a detailed explanation or summary.
                         - Speak outcomes clearly. If an action fails, say so once, propose a fallback, or ask how to proceed.
                         - When tools return structured data, summarize it to the user in a way that is easy to understand, and don't directly recite identifiers or other technical details.
-                        - If the user asks 'Jarvis you there?', answer with something simple lie 'At your service, Sir' or 'Yes, Sir, I am here to assist you' or a variation of that.
+                        - If the user asks 'Cuppy you there?', answer with something simple lie 'At your service, Sir' or 'Yes, Sir, I am here to assist you' or a variation of that.
 
                         # Hard rule
-                        - If the user says "Jarvis, you there?", you **must** answer the exact line and nothing else after that: "At your service, Sir"
+                        - If the user says "Cuppy, you there?", you **must** answer the exact line and nothing else after that: "At your service, Sir"
                         # Conversation Example
-                        - User: "Jarvis, can you do XYZ task for me?"
-                        - Jarvis: "Of course sir, as you wish. I will now do XYZ task for you."
+                        - User: "Cuppy, can you do XYZ task for me?"
+                        - Cuppy: "Of course sir, as you wish. I will now do XYZ task for you."
 
                         # Tools
 
@@ -140,7 +140,7 @@ class Assistant(Agent):
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="my-agent")
+@server.rtc_session(agent_name="cuppy")
 async def my_agent(ctx: JobContext):
     # Logging setup
     # Add any other context you want in all log entries here

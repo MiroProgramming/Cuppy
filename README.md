@@ -1,6 +1,6 @@
-# Jarvis - Voice AI Butler
+# Cuppy - Voice AI Butler
 
-A voice-controlled AI butler built on the **LiveKit Agents** framework. Speak to Jarvis, and it responds with a sarcastic British-butler persona while having full control over a real web browser — browsing, searching, clicking, typing, and completing tasks on your behalf.
+A voice-controlled AI butler built on the **LiveKit Agents** framework. Speak to Cuppy, and it responds with a sarcastic British-butler persona while having full control over a real web browser — browsing, searching, clicking, typing, and completing tasks on your behalf.
 
 ## Features
 
@@ -132,7 +132,7 @@ flutter run
 
 ## Architecture
 
-Jarvis uses **LiveKit's realtime agent framework** with function tools:
+Cuppy uses **LiveKit's realtime agent framework** with function tools:
 
 1. **Voice Pipeline**: User speaks → LiveKit streams audio → AI Coustics denoises → Gemini Realtime processes
 2. **Tool Calling**: Gemini invokes browser tools via LiveKit's function tool system

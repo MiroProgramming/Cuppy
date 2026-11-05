@@ -34,7 +34,7 @@ export interface AppConfig {
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
   companyName: 'LiveKit',
-  pageTitle: 'LiveKit Voice Agent',
+  pageTitle: 'Cuppy',
   pageDescription: 'A voice agent built with LiveKit',
 
   supportsChatInput: true,
@@ -46,7 +46,7 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   accent: '#002cf2',
   logoDark: '/lk-logo-dark.svg',
   accentDark: '#1fd5f9',
-  startButtonText: 'Talk to Jarvis',
+  startButtonText: 'Talk to Cuppy',
 
   // optional: audio visualization configuration
   // audioVisualizerType: 'bar',
