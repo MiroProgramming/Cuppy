@@ -11,6 +11,7 @@ Only messages from DISCORD_USER_ID are answered; everyone else is ignored.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import html
 import json
 import logging
@@ -62,7 +63,7 @@ ToolFn = Callable[..., Awaitable[Any]]
 
 
 class _TextExtractor(HTMLParser):
-    SKIP = {"script", "style", "noscript", "svg", "head"}
+    SKIP = frozenset({"script", "style", "noscript", "svg", "head"})
 
     def __init__(self) -> None:
         super().__init__()
@@ -395,7 +396,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(main())
-    except KeyboardInterrupt:
-        pass

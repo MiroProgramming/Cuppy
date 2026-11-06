@@ -2,7 +2,6 @@ import time
 from types import SimpleNamespace
 
 import discord
-import pytest
 
 from discord_bot import (
     ChatTools,
