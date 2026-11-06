@@ -17,7 +17,6 @@ import json
 import logging
 import os
 import re
-import time
 from collections.abc import Awaitable, Callable
 from html.parser import HTMLParser
 from typing import Any
@@ -26,6 +25,7 @@ import aiohttp
 from dotenv import load_dotenv
 
 from discord_tools import DiscordClient, split_message
+from shared_memory import ConversationLog, tag_for_model
 from watcher import clean_link, search_url, watch_loop
 from watches import WatchStore
 
@@ -34,7 +34,6 @@ logger = logging.getLogger("cuppy-discord")
 DEFAULT_MODEL = "gemini-flash-latest"
 MAX_TOOL_ROUNDS = 6
 MAX_PAGE_CHARS = 8000
-IDLE_RESET_SECONDS = 6 * 60 * 60
 RESET_WORDS = {"reset", "!reset", "new chat", "/reset"}
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -57,6 +56,9 @@ over Discord direct messages. Address him as "Sir" where it fits.
   when it appears. If he did not say how often, check every two hours. Use
   list_watches and cancel_watch to manage them.
 - If a tool fails, say so briefly and suggest what to try instead.
+- You also talk with him by voice. Earlier messages are tagged with when and where
+  they happened (voice call or Discord); treat it all as one conversation and
+  continue naturally. Do not add tags to your own replies.
 """
 
 ToolFn = Callable[..., Awaitable[Any]]
@@ -265,9 +267,14 @@ async def call_tool(registry: dict[str, ToolFn], name: str, args: dict | None) -
 
 
 class CuppyChat:
-    """A Gemini conversation with tool use and memory of recent messages."""
+    """Gemini text chat with tool use, sharing its history with voice Cuppy."""
 
-    def __init__(self, tools: ChatTools, model: str | None = None) -> None:
+    def __init__(
+        self,
+        tools: ChatTools,
+        log: ConversationLog | None = None,
+        model: str | None = None,
+    ) -> None:
         from google import genai
         from google.genai import types
 
@@ -275,6 +282,7 @@ class CuppyChat:
         self._client = genai.Client()
         self._model = model or os.getenv("CHAT_MODEL", DEFAULT_MODEL)
         self._registry = tools.registry()
+        self.log = log or ConversationLog()
         self._config = types.GenerateContentConfig(
             system_instruction=TEXT_INSTRUCTIONS,
             tools=[types.Tool(function_declarations=TOOL_DECLARATIONS)],
@@ -282,27 +290,43 @@ class CuppyChat:
                 disable=True
             ),
         )
-        self._chat = None
-        self._last_message = 0.0
 
     def reset(self) -> None:
-        self._chat = None
+        self.log.reset()
+
+    def build_history(self, text: str) -> list:
+        """Shared recent history (voice and Discord) plus the new message."""
+        types = self._types
+        turns: list[tuple[str, str]] = [
+            ("user" if e["role"] == "user" else "model", tag_for_model(e))
+            for e in self.log.recent()
+        ]
+        turns.append(("user", text))
+        while turns and turns[0][0] != "user":
+            turns.pop(0)  # the conversation must start with the user
+        contents: list = []
+        for role, message in turns:
+            if contents and contents[-1].role == role:
+                contents[-1].parts.append(types.Part.from_text(text=message))
+            else:
+                contents.append(
+                    types.Content(role=role, parts=[types.Part.from_text(text=message)])
+                )
+        return contents
+
+    async def _generate(self, contents: list):
+        return await self._client.aio.models.generate_content(
+            model=self._model, contents=contents, config=self._config
+        )
 
     async def reply(self, text: str) -> str:
-        if (
-            self._chat is None
-            or time.monotonic() - self._last_message > IDLE_RESET_SECONDS
-        ):
-            self._chat = self._client.aio.chats.create(
-                model=self._model, config=self._config
-            )
-        self._last_message = time.monotonic()
-
-        response = await self._chat.send_message(text)
+        contents = self.build_history(text)
+        response = await self._generate(contents)
         for _ in range(MAX_TOOL_ROUNDS):
             calls = response.function_calls or []
             if not calls:
                 break
+            contents.append(response.candidates[0].content)
             parts = []
             for call in calls:
                 logger.info(
@@ -314,10 +338,13 @@ class CuppyChat:
                         name=call.name, response=result
                     )
                 )
-            response = await self._chat.send_message(parts)
-        return (
-            response.text or ""
-        ).strip() or "My apologies, Sir, I seem to be lost for words."
+            contents.append(self._types.Content(role="user", parts=parts))
+            response = await self._generate(contents)
+        answer = (response.text or "").strip()
+        answer = answer or "My apologies, Sir, I seem to be lost for words."
+        self.log.append("user", text, "discord")
+        self.log.append("assistant", answer, "discord")
+        return answer
 
 
 def is_owner_dm(message: Any, owner_id: int, bot_user: Any) -> bool:
@@ -358,7 +385,10 @@ def build_client(
                 return
             if text.lower() in RESET_WORDS:
                 chat.reset()
-                await message.channel.send("Fresh start, Sir. What do you need?")
+                await message.channel.send(
+                    "Fresh start, Sir. I have forgotten our conversation, "
+                    "on Discord and by voice."
+                )
                 return
             async with message.channel.typing():
                 try:

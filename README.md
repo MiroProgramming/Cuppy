@@ -161,6 +161,8 @@ uv run src/discord_bot.py
 
 The bot shows as **online** while this runs. It also runs your background watches, so you don't need `watcher.py` at the same time. Send `reset` to start a fresh conversation.
 
+**Shared memory:** voice Cuppy and Discord Cuppy share one conversation (saved in `jarvis_new/data/conversation.jsonl`, last 7 days). Tell one something and the other knows it. A voice call picks up Discord messages when the call starts. Sending `reset` on Discord clears it for both.
+
 ## Architecture
 
 Cuppy uses **LiveKit's realtime agent framework** with function tools:

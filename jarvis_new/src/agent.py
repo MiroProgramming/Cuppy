@@ -18,6 +18,7 @@ from livekit.plugins import ai_coustics, google
 from browser import BrowserManager
 from discord_tools import DiscordClient, DiscordTools
 from prompts import AGENT_INSTRUCTIONS
+from shared_memory import ConversationLog, format_for_prompt
 from tools import BrowserTools
 from watches import WatchStore, WatchTools
 
@@ -29,7 +30,9 @@ class Assistant(Agent):
         self,
         browser: BrowserManager | None = None,
         discord: DiscordClient | None = None,
+        conversation: ConversationLog | None = None,
     ) -> None:
+        history = format_for_prompt(conversation.recent()) if conversation else ""
         self.browser = browser or BrowserManager(headless=True)
         self.browser_tools = BrowserTools(self.browser)
         self.discord_tools = DiscordTools(discord, self.browser) if discord else None
@@ -138,7 +141,8 @@ class Assistant(Agent):
                         - For medical, legal, or financial topics, provide general information only and suggest consulting a qualified professional.
                         - Protect privacy and minimize sensitive data.
                         """
-            ),
+            )
+            + (f"\n\n{history}\n" if history else ""),
             tools=[
                 *self.browser_tools.tools,
                 *(self.discord_tools.tools if self.discord_tools else []),
@@ -146,6 +150,16 @@ class Assistant(Agent):
                 *self._end_call_tool.tools,
             ],
         )
+
+
+def save_chat_item(conversation: ConversationLog, item) -> None:
+    """Save a spoken user or Cuppy line to the shared conversation."""
+    if getattr(item, "type", None) != "message" or item.role not in (
+        "user",
+        "assistant",
+    ):
+        return
+    conversation.append(item.role, item.text_content or "", "voice")
 
 
 server = AgentServer()
@@ -165,6 +179,9 @@ async def my_agent(ctx: JobContext):
     discord = DiscordClient.from_env()
     if discord is not None:
         ctx.add_shutdown_callback(discord.close)
+
+    # Shared with the Discord bot, so both remember the same conversation.
+    conversation = ConversationLog()
 
     # Gemini realtime handles the voice input and output for this session.
     session = AgentSession(
@@ -197,9 +214,13 @@ async def my_agent(ctx: JobContext):
         # expressive=True,
     )
 
+    @session.on("conversation_item_added")
+    def _save_to_shared_memory(event) -> None:
+        save_chat_item(conversation, event.item)
+
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(browser, discord),
+        agent=Assistant(browser, discord, conversation),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             video_input=True,

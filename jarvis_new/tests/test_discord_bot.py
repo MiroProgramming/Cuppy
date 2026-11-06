@@ -1,4 +1,3 @@
-import time
 from types import SimpleNamespace
 
 import discord
@@ -11,6 +10,7 @@ from discord_bot import (
     is_owner_dm,
     parse_search_results,
 )
+from shared_memory import ConversationLog
 from watches import WatchStore
 
 DDG_PAGE = """
@@ -72,45 +72,77 @@ def test_only_owner_dms_are_answered():
     assert not is_owner_dm(SimpleNamespace(author=owner, channel=object()), 1, bot)
 
 
-class FakeChat:
-    def __init__(self, responses):
-        self.responses = list(responses)
-        self.sent = []
+def make_response(text=None, calls=None):
+    from google.genai import types
 
-    async def send_message(self, message):
-        self.sent.append(message)
-        return self.responses.pop(0)
+    content = types.Content(
+        role="model",
+        parts=[
+            types.Part.from_function_call(name=c["name"], args=c["args"])
+            for c in calls or []
+        ]
+        or [types.Part.from_text(text=text or "")],
+    )
+    return SimpleNamespace(
+        function_calls=[SimpleNamespace(**c) for c in calls] if calls else None,
+        text=text,
+        candidates=[SimpleNamespace(content=content)],
+    )
 
 
-async def test_reply_runs_tools_then_answers(tmp_path, monkeypatch):
+async def test_reply_runs_tools_then_answers_and_shares_history(tmp_path, monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "test")
     tools = ChatTools(WatchStore(tmp_path))
-    chat = CuppyChat(tools)
-    fake = FakeChat(
-        [
-            SimpleNamespace(
-                function_calls=[
-                    SimpleNamespace(
-                        name="create_watch",
-                        args={
-                            "description": "Aussie pups Egypt",
-                            "search_query": "aussie egypt",
-                        },
-                    )
-                ],
-                text=None,
-            ),
-            SimpleNamespace(function_calls=None, text="Watching for pups, Sir."),
-        ]
-    )
-    chat._chat = fake
-    chat._last_message = time.monotonic()
+    log = ConversationLog(tmp_path)
+    log.append(
+        "assistant", "Good evening, Sir", "voice"
+    )  # history may start with Cuppy
+    log.append("user", "My budget is 20,000 pounds", "voice")
+    chat = CuppyChat(tools, log)
 
-    assert (
-        await chat.reply("keep an eye out for aussie puppies")
-        == "Watching for pups, Sir."
-    )
+    responses = [
+        make_response(
+            calls=[
+                {
+                    "name": "create_watch",
+                    "args": {
+                        "description": "Aussie pups Egypt",
+                        "search_query": "aussie egypt",
+                    },
+                }
+            ]
+        ),
+        make_response(text="Watching for pups under your budget, Sir."),
+    ]
+    sent = []
+
+    async def fake_generate(contents):
+        sent.append(list(contents))
+        return responses.pop(0)
+
+    chat._generate = fake_generate
+
+    answer = await chat.reply("keep an eye out for aussie puppies")
+    assert answer == "Watching for pups under your budget, Sir."
     assert [w.description for w in tools.store.list()] == ["Aussie pups Egypt"]
-    function_response = fake.sent[1][0].function_response
-    assert function_response.name == "create_watch"
-    assert function_response.response["created"] is True
+
+    first = sent[0]
+    assert first[0].role == "user"  # leading Cuppy line dropped
+    assert "voice call] My budget is 20,000 pounds" in first[0].parts[0].text
+    assert first[0].parts[1].text == "keep an eye out for aussie puppies"
+    tool_reply = sent[1][-1].parts[0].function_response
+    assert tool_reply.name == "create_watch" and tool_reply.response["created"]
+
+    assert [(e["channel"], e["text"]) for e in log.recent()][-2:] == [
+        ("discord", "keep an eye out for aussie puppies"),
+        ("discord", "Watching for pups under your budget, Sir."),
+    ]
+
+
+async def test_reset_clears_shared_history(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test")
+    log = ConversationLog(tmp_path)
+    log.append("user", "secret", "voice")
+    chat = CuppyChat(ChatTools(WatchStore(tmp_path)), log)
+    chat.reset()
+    assert len(chat.build_history("hi")) == 1
