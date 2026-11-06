@@ -62,7 +62,7 @@ class Assistant(Agent):
             # 4. Replace the llm argument with:
             #     llm=openai.realtime.RealtimeModel(voice="marin")
             instructions=textwrap.dedent(
-                        """\
+                """\
                         You are Cuppy a helpful and sarcastic AI butler.
 
                         # Output rules
@@ -138,7 +138,7 @@ class Assistant(Agent):
                         - For medical, legal, or financial topics, provide general information only and suggest consulting a qualified professional.
                         - Protect privacy and minimize sensitive data.
                         """
-                    ),
+            ),
             tools=[
                 *self.browser_tools.tools,
                 *(self.discord_tools.tools if self.discord_tools else []),
@@ -194,7 +194,7 @@ async def my_agent(ctx: JobContext):
         # emits inline delivery tags (emotion, pacing, non-verbal sounds) that the TTS renders and
         # the transcript never shows. Requires a TTS model that supports markup, such as the Fish
         # Audio model above.
-        # expressive=True, 
+        # expressive=True,
     )
 
     # Start the session, which initializes the voice pipeline and warms up the models
@@ -210,7 +210,7 @@ async def my_agent(ctx: JobContext):
             ),
         ),
     )
-    
+
     # Join the room and connect to the user
     await ctx.connect()
 

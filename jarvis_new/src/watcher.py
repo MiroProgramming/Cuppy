@@ -27,7 +27,7 @@ logger = logging.getLogger("cuppy-watcher")
 POLL_SECONDS = 60
 MAX_CANDIDATES = 150
 MAX_RESULTS_PER_MESSAGE = 5
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-flash-latest"
 
 Link = dict[str, str]
 Fetcher = Callable[[str], Awaitable[list[Link]]]
@@ -213,24 +213,17 @@ async def run_watch(
     return matches
 
 
-async def main() -> None:
-    load_dotenv(".env.local")
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-
-    discord = DiscordClient.from_env()
-    if discord is None:
-        raise SystemExit("Set DISCORD_BOT_TOKEN and DISCORD_USER_ID in .env.local")
-    store = WatchStore()
+async def watch_loop(discord: Any, store: WatchStore | None = None) -> None:
+    """Re-check due watches forever. Shared by watcher.py and discord_bot.py."""
+    store = store or WatchStore()
     judge = GeminiJudge()
-    logger.info("Cuppy watcher started. Leave this window open.")
-
-    try:
-        while True:
-            watches = store.list()
-            state = WatchState()
-            state.prune({w.id for w in watches})
-            due = [w for w in watches if state.is_due(w)]
-            if due:
+    while True:
+        watches = store.list()
+        state = WatchState()
+        state.prune({w.id for w in watches})
+        due = [w for w in watches if state.is_due(w)]
+        if due:
+            try:
                 async with PlaywrightFetcher() as fetch:
                     for watch in due:
                         try:
@@ -242,7 +235,23 @@ async def main() -> None:
                         except Exception:
                             logger.exception("Watch %s failed", watch.id)
                             state.record_run(watch, [])
-            await asyncio.sleep(POLL_SECONDS)
+            except Exception:
+                logger.exception(
+                    "Could not start the browser. Run: uv run playwright install chromium"
+                )
+        await asyncio.sleep(POLL_SECONDS)
+
+
+async def main() -> None:
+    load_dotenv(".env.local")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+
+    discord = DiscordClient.from_env()
+    if discord is None:
+        raise SystemExit("Set DISCORD_BOT_TOKEN and DISCORD_USER_ID in .env.local")
+    logger.info("Cuppy watcher started. Leave this window open.")
+    try:
+        await watch_loop(discord)
     finally:
         await discord.close()
 

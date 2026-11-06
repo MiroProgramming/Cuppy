@@ -137,7 +137,7 @@ Ask Cuppy something like *"Keep an eye out for Australian Shepherd puppies for s
 
 Requires `GOOGLE_API_KEY`, `DISCORD_BOT_TOKEN` and `DISCORD_USER_ID` in `jarvis_new/.env.local`.
 
-Start it in a second terminal and leave it running (your PC must stay on and not sleep):
+Start it in a second terminal and leave it running (your PC must stay on and not sleep). If you run `discord_bot.py`, skip this; the bot runs watches too:
 
 ```
 cd jarvis_new
@@ -149,6 +149,17 @@ Tips:
 - Ask "What are you watching?" or "Stop watching for puppies" to manage watches.
 - The first check sends whatever matches right now; after that, only new listings.
 - Sites that require a login (e.g. Facebook Marketplace) usually can't be checked.
+
+## Chat with Cuppy on Discord
+
+Cuppy can also live in your Discord DMs: message it any time and it replies over text. It can search the web, read pages, and create or cancel watches. Only you (`DISCORD_USER_ID`) get answers; everyone else is ignored.
+
+```
+cd jarvis_new
+uv run src/discord_bot.py
+```
+
+The bot shows as **online** while this runs. It also runs your background watches, so you don't need `watcher.py` at the same time. Send `reset` to start a fresh conversation.
 
 ## Architecture
 
