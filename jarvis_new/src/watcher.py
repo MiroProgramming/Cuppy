@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
@@ -20,6 +19,7 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from dotenv import load_dotenv
 
 from discord_tools import DiscordClient, DiscordError
+from gemini_fallback import generate_with_fallback, model_chain
 from watches import Watch, WatchState, WatchStore
 
 logger = logging.getLogger("cuppy-watcher")
@@ -27,7 +27,6 @@ logger = logging.getLogger("cuppy-watcher")
 POLL_SECONDS = 60
 MAX_CANDIDATES = 150
 MAX_RESULTS_PER_MESSAGE = 5
-DEFAULT_MODEL = "gemini-flash-latest"
 
 Link = dict[str, str]
 Fetcher = Callable[[str], Awaitable[list[Link]]]
@@ -118,7 +117,7 @@ class GeminiJudge:
         from google import genai
 
         self._client = genai.Client()
-        self._model = model or os.getenv("WATCHER_MODEL", DEFAULT_MODEL)
+        self._models = [model] if model else model_chain("WATCHER_MODEL")
 
     async def __call__(
         self, description: str, candidates: list[Link]
@@ -148,10 +147,11 @@ class GeminiJudge:
                 "required": ["url", "title"],
             },
         }
-        response = await self._client.aio.models.generate_content(
-            model=self._model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
+        response = await generate_with_fallback(
+            self._client,
+            self._models,
+            prompt,
+            types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema,
                 temperature=0,

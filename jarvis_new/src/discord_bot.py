@@ -25,13 +25,13 @@ import aiohttp
 from dotenv import load_dotenv
 
 from discord_tools import DiscordClient, split_message
+from gemini_fallback import generate_with_fallback, model_chain
 from shared_memory import ConversationLog, tag_for_model
 from watcher import clean_link, search_url, watch_loop
 from watches import WatchStore
 
 logger = logging.getLogger("cuppy-discord")
 
-DEFAULT_MODEL = "gemini-flash-latest"
 MAX_TOOL_ROUNDS = 6
 MAX_PAGE_CHARS = 8000
 RESET_WORDS = {"reset", "!reset", "new chat", "/reset"}
@@ -280,7 +280,7 @@ class CuppyChat:
 
         self._types = types
         self._client = genai.Client()
-        self._model = model or os.getenv("CHAT_MODEL", DEFAULT_MODEL)
+        self._models = [model] if model else model_chain("CHAT_MODEL")
         self._registry = tools.registry()
         self.log = log or ConversationLog()
         self._config = types.GenerateContentConfig(
@@ -315,8 +315,8 @@ class CuppyChat:
         return contents
 
     async def _generate(self, contents: list):
-        return await self._client.aio.models.generate_content(
-            model=self._model, contents=contents, config=self._config
+        return await generate_with_fallback(
+            self._client, self._models, contents, self._config
         )
 
     async def reply(self, text: str) -> str:
@@ -394,7 +394,10 @@ def build_client(
                     answer = await chat.reply(text)
                 except Exception:
                     logger.exception("Chat failed")
-                    answer = "Apologies, Sir, something went wrong on my end. Try again shortly."
+                    answer = (
+                        "Apologies, Sir, Google's servers are not cooperating. "
+                        "Do try again in a minute."
+                    )
             for chunk in split_message(answer):
                 await message.channel.send(chunk)
 
