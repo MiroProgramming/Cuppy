@@ -365,7 +365,6 @@ def build_client(
 
     intents = discord.Intents.default()
     intents.dm_messages = True
-    intents.message_content = True  # not needed for DMs, harmless if enabled
 
     class CuppyBot(discord.Client):
         async def setup_hook(self) -> None:
