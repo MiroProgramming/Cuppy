@@ -150,6 +150,12 @@ Tips:
 - The first check sends whatever matches right now; after that, only new listings.
 - Sites that require a login (e.g. Facebook Marketplace) usually can't be checked.
 
+## Reminders
+
+Ask Cuppy by voice or on Discord: *"Remind me to call the vet at 4pm"*, *"remind me in 20 minutes to check the oven"*, or *"remind me every day at 9 to take my vitamins"*. The reminder arrives as a Discord DM at that time.
+
+Reminders are delivered by `discord_bot.py`, so keep it running. If it was off when a reminder was due, it sends it as soon as it starts again (with a note that it is late), unless it is more than a day old.
+
 ## Chat with Cuppy on Discord
 
 Cuppy can also live in your Discord DMs: message it any time and it replies over text. It can search the web, read pages, and create or cancel watches. Only you (`DISCORD_USER_ID`) get answers; everyone else is ignored.

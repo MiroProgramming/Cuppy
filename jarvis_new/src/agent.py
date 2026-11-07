@@ -18,6 +18,8 @@ from livekit.plugins import ai_coustics, google
 from browser import BrowserManager
 from discord_tools import DiscordClient, DiscordTools
 from prompts import AGENT_INSTRUCTIONS
+from reminder_tools import ReminderTools
+from reminders import ReminderStore, describe_now
 from shared_memory import ConversationLog, format_for_prompt
 from tools import BrowserTools
 from watches import WatchStore, WatchTools
@@ -37,6 +39,7 @@ class Assistant(Agent):
         self.browser_tools = BrowserTools(self.browser)
         self.discord_tools = DiscordTools(discord, self.browser) if discord else None
         self.watch_tools = WatchTools(WatchStore(), self.browser) if discord else None
+        self.reminder_tools = ReminderTools(ReminderStore()) if discord else None
         self._end_call_tool = EndCallTool(
             extra_description=(
                 "Only end the call after the user clearly says they are finished, "
@@ -132,6 +135,13 @@ class Assistant(Agent):
                         - Use list_watches and cancel_watch when they ask what you are watching or want one stopped.
                         - After creating a watch, confirm briefly, for example "I shall keep an eye out and message you on Discord, Sir."
 
+                        # Reminders
+
+                        - When the user asks to be reminded of something, or to be messaged at a certain time, use set_reminder. The reminder arrives as a Discord message at that time.
+                        - Work out the exact time from the current date and time given at the end of these instructions. For "in twenty minutes" use in_minutes instead.
+                        - Confirm the time back briefly, for example "I shall remind you at half past three, Sir."
+                        - Use list_reminders and cancel_reminder when asked what reminders are set or to cancel one.
+
                         # Special Requests
                         - If the user asks to play his theme song or to play his favorite song, open this url: https://music.youtube.com/watch?v=dWuwreQg1IA
 
@@ -142,11 +152,13 @@ class Assistant(Agent):
                         - Protect privacy and minimize sensitive data.
                         """
             )
+            + f"\nCurrent date and time when this call started: {describe_now()}\n"
             + (f"\n\n{history}\n" if history else ""),
             tools=[
                 *self.browser_tools.tools,
                 *(self.discord_tools.tools if self.discord_tools else []),
                 *(self.watch_tools.tools if self.watch_tools else []),
+                *(self.reminder_tools.tools if self.reminder_tools else []),
                 *self._end_call_tool.tools,
             ],
         )

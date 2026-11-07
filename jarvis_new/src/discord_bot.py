@@ -26,6 +26,14 @@ from dotenv import load_dotenv
 
 from discord_tools import DiscordClient, split_message
 from gemini_fallback import generate_with_fallback, model_chain
+from reminders import (
+    ReminderStore,
+    describe_now,
+    reminder_loop,
+    tool_cancel_reminder,
+    tool_list_reminders,
+    tool_set_reminder,
+)
 from shared_memory import ConversationLog, tag_for_model
 from watcher import clean_link, search_url, watch_loop
 from watches import WatchStore
@@ -55,6 +63,10 @@ over Discord direct messages. Address him as "Sir" where it fits.
 - Use create_watch when he wants you to keep checking for something and tell him
   when it appears. If he did not say how often, check every two hours. Use
   list_watches and cancel_watch to manage them.
+- Use set_reminder when he asks to be reminded or messaged at a time. You
+  deliver it yourself as a Discord message at that time, so confirm the time back
+  to him, e.g. "I'll remind you today at 15:30, Sir." Use list_reminders and
+  cancel_reminder to manage them.
 - If a tool fails, say so briefly and suggest what to try instead.
 - You also talk with him by voice. Earlier messages are tagged with when and where
   they happened (voice call or Discord); treat it all as one conversation and
@@ -129,9 +141,15 @@ def parse_search_results(page: str, limit: int = 8) -> list[dict[str, str]]:
 class ChatTools:
     """Tools Cuppy can use while chatting over text."""
 
-    def __init__(self, store: WatchStore, session: aiohttp.ClientSession | None = None):
+    def __init__(
+        self,
+        store: WatchStore,
+        session: aiohttp.ClientSession | None = None,
+        reminders: ReminderStore | None = None,
+    ):
         self.store = store
         self._session = session
+        self.reminders = reminders or ReminderStore(store.path.parent)
 
     async def _get(self, url: str) -> str:
         if self._session is None:
@@ -184,8 +202,26 @@ class ChatTools:
     async def cancel_watch(self, watch_id: str) -> dict:
         return {"cancelled": self.store.remove(watch_id)}
 
+    async def set_reminder(
+        self,
+        message: str,
+        at: str | None = None,
+        in_minutes: float | None = None,
+        repeat: str = "none",
+    ) -> dict:
+        return tool_set_reminder(self.reminders, message, at, in_minutes, repeat)
+
+    async def list_reminders(self) -> dict:
+        return tool_list_reminders(self.reminders)
+
+    async def cancel_reminder(self, reminder_id: str) -> dict:
+        return tool_cancel_reminder(self.reminders, reminder_id)
+
     def registry(self) -> dict[str, ToolFn]:
         return {
+            "set_reminder": self.set_reminder,
+            "list_reminders": self.list_reminders,
+            "cancel_reminder": self.cancel_reminder,
             "web_search": self.web_search,
             "read_webpage": self.read_webpage,
             "create_watch": self.create_watch,
@@ -199,6 +235,51 @@ def _schema(props: dict, required: list[str]) -> dict:
 
 
 TOOL_DECLARATIONS = [
+    {
+        "name": "set_reminder",
+        "description": (
+            "Remind the user later by Discord message. Give either `at` or "
+            "`in_minutes`."
+        ),
+        "parameters_json_schema": _schema(
+            {
+                "message": {
+                    "type": "string",
+                    "description": "The reminder itself, e.g. 'Call the vet'.",
+                },
+                "at": {
+                    "type": "string",
+                    "description": (
+                        "Local date and time like 2026-11-07T15:30, worked out "
+                        "from the current date and time."
+                    ),
+                },
+                "in_minutes": {
+                    "type": "number",
+                    "description": "Minutes from now, for 'in 20 minutes'.",
+                },
+                "repeat": {
+                    "type": "string",
+                    "enum": ["none", "daily", "weekly"],
+                    "description": "Whether it repeats. Default none.",
+                },
+            },
+            ["message"],
+        ),
+    },
+    {
+        "name": "list_reminders",
+        "description": "List upcoming reminders and the current date and time.",
+        "parameters_json_schema": _schema({}, []),
+    },
+    {
+        "name": "cancel_reminder",
+        "description": "Cancel a reminder by id. Call list_reminders first.",
+        "parameters_json_schema": _schema(
+            {"reminder_id": {"type": "string", "description": "The reminder id."}},
+            ["reminder_id"],
+        ),
+    },
     {
         "name": "web_search",
         "description": "Search the web. Returns titles, links, and snippets.",
@@ -315,8 +396,15 @@ class CuppyChat:
         return contents
 
     async def _generate(self, contents: list):
+        config = self._config.model_copy(
+            update={
+                "system_instruction": (
+                    f"{TEXT_INSTRUCTIONS}\nCurrent date and time: {describe_now()}\n"
+                )
+            }
+        )
         return await generate_with_fallback(
-            self._client, self._models, contents, self._config
+            self._client, self._models, contents, config
         )
 
     async def reply(self, text: str) -> str:
@@ -368,6 +456,7 @@ def build_client(
 
     class CuppyBot(discord.Client):
         async def setup_hook(self) -> None:
+            self.loop.create_task(reminder_loop(notify, log=chat.log))
             if run_watches:
                 self.loop.create_task(watch_loop(notify))
 

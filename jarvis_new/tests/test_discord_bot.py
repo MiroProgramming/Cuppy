@@ -146,3 +146,28 @@ async def test_reset_clears_shared_history(tmp_path, monkeypatch):
     chat = CuppyChat(ChatTools(WatchStore(tmp_path)), log)
     chat.reset()
     assert len(chat.build_history("hi")) == 1
+
+
+async def test_set_reminder_through_chat_tools(tmp_path):
+    tools = ChatTools(WatchStore(tmp_path))
+    result = await call_tool(
+        tools.registry(), "set_reminder", {"message": "Call the vet", "in_minutes": 15}
+    )
+    assert result["set"]
+    assert (await tools.list_reminders())["reminders"][0]["message"] == "Call the vet"
+    bad = await call_tool(tools.registry(), "set_reminder", {"message": "x"})
+    assert "error" in bad
+
+
+async def test_requests_include_current_time(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test")
+    chat = CuppyChat(ChatTools(WatchStore(tmp_path)), ConversationLog(tmp_path))
+    seen = {}
+
+    async def fake_fallback(client, models, contents, config):
+        seen["instruction"] = config.system_instruction
+        return make_response(text="ok")
+
+    monkeypatch.setattr("discord_bot.generate_with_fallback", fake_fallback)
+    await chat.reply("hi")
+    assert "Current date and time:" in seen["instruction"]

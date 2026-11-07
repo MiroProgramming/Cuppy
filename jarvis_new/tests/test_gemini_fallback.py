@@ -51,3 +51,21 @@ def test_model_chain(monkeypatch):
     monkeypatch.setenv("CHAT_MODEL", "gemini-2.5-flash")
     chain = model_chain("CHAT_MODEL")
     assert chain[0] == "gemini-2.5-flash" and chain.count("gemini-2.5-flash") == 1
+
+
+async def test_hanging_model_times_out_and_falls_back():
+    import asyncio
+
+    class SlowModels(FakeModels):
+        async def generate_content(self, model, contents, config=None):
+            if model == "slow":
+                self.tried.append(model)
+                await asyncio.sleep(10)
+            return await super().generate_content(model, contents, config)
+
+    models = SlowModels({})
+    client = SimpleNamespace(aio=SimpleNamespace(models=models))
+    result = await generate_with_fallback(
+        client, ["slow", "fast"], "hi", retry_delay=0, timeout=0.05
+    )
+    assert result == "answer from fast"
